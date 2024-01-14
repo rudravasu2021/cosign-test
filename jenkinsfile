@@ -1,0 +1,39 @@
+pipeline {
+    agent any
+    
+    environment {
+        docker_image = 'cosignimage'
+        DOCKERFILE_PATH = 'Dockerfile'
+        docker_credentials_id = 'DOCKER'
+        your_docker_registry = 'docker.io'
+    }
+    
+    stages {
+         stage('Checkout from git') {
+            steps {
+                git 'https://github.com/rudravasu2021/cosign-test.git'
+            }
+        }
+        stage('Build and Push Docker Image') {
+            steps {
+                script {
+                    // Build Docker image and push it to the registry
+                    docker.build("rudravasu2021/${docker_image}:${BUILD_NUMBER}")
+                    docker.withRegistry('https://${your_docker_registry}', "${docker_credentials_id}") {
+                        docker.image("rudravasu2021/${docker_image}:${BUILD_NUMBER}").push()
+                    }
+                }
+            }
+        }
+        
+        stage('Sign Docker Image') {
+            steps {
+                script {
+                    // Sign the Docker image with build information
+                    def cosignCommand = "cosign sign -key /home/esecadmin/cosign.key -a build-info=\"${BUILD_TAG}@${BUILD_URL}\" rudravasu2021/${docker_image}:${BUILD_NUMBER}"
+                    sh cosignCommand
+                }
+            }
+        }
+    }
+}
