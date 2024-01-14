@@ -1,39 +1,58 @@
 pipeline {
     agent any
-    
-    environment {
-        docker_image = 'cosignimage'
+    environment{
+        DOCKER_IMAGE_NAME = 'rudravasu2021/nodejs1'
         DOCKERFILE_PATH = 'Dockerfile'
-        docker_credentials_id = 'DOCKER'
-        your_docker_registry = 'docker.io'
+        COSIGN_PASSWORD='cosign-password'
+        COSIGN_PRIVATE_KEY='cosign-private-key'
+        DOCKER_HUB_CREDENTIALS = 'DOCKER'
+        DOCKER_REGISTRY = 'docker.io'
+        
     }
-    
     stages {
-         stage('Checkout from git') {
-            steps {
+        stage('checkout'){
+            steps{
                 git 'https://github.com/rudravasu2021/cosign-test.git'
+                
             }
         }
-        stage('Build and Push Docker Image') {
+        stage('DockerBuild and push') {
             steps {
                 script {
-                    // Build Docker image and push it to the registry
-                    docker.build("rudravasu2021/${docker_image}:${BUILD_NUMBER}")
-                    docker.withRegistry('https://${your_docker_registry}', "${docker_credentials_id}") {
-                        docker.image("rudravasu2021/${docker_image}:${BUILD_NUMBER}").push()
+                    // Build and push the Docker image
+                    withCredentials([usernamePassword(credentialsId: DOCKER_HUB_CREDENTIALS, passwordVariable: 'DOCKER_HUB_PASSWORD', usernameVariable: 'DOCKER_HUB_USERNAME')]) {
+                        sh """
+                            
+                            
+                            docker build -t ${DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER} .
+                            docker login -u ${DOCKER_HUB_USERNAME} -p ${DOCKER_HUB_PASSWORD}
+                            docker push ${DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER}
+                        """
                     }
                 }
             }
         }
-        
-        stage('Sign Docker Image') {
+         stage('Sign Docker Image') {
             steps {
                 script {
-                    // Sign the Docker image with build information
-                    def cosignCommand = "cosign sign -key /home/esecadmin/cosign.key -a build-info=\"${BUILD_TAG}@${BUILD_URL}\" rudravasu2021/${docker_image}:${BUILD_NUMBER}"
-                    sh cosignCommand
+                    
+                    sh '''
+                    cosign version
+                    echo $COSIGN_PASSWORD 
+                    cosign sign --key $COSIGN_PRIVATE_KEY docker.io/${DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER} 
+                    '''
+                  
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'Build, pushed and signed image to Docker Hub succeeded!'
+        }
+        failure {
+            echo 'Build, pushed and signed image to Docker Hub failed!'
         }
     }
 }
